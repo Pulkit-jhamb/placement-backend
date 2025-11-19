@@ -528,6 +528,7 @@ def get_user_profile():
         "performanceDocUrl": current_user.get("performanceDocUrl", ""),
         "onboardingCompleted": current_user.get("onboardingCompleted", False),
         "rollNo": current_user.get("rollNo", ""),
+        "profId": current_user.get("profId", ""),
         "skills": current_user.get("skills", []),
         "techStack": current_user.get("techStack", []),
         "aiTools": current_user.get("aiTools", []),
@@ -566,6 +567,9 @@ def update_user_profile():
             update_fields["performanceDocUrl"] = data["performanceDocUrl"]
         if "rollNo" in data:
             update_fields["rollNo"] = data["rollNo"]
+        if "profId" in data and current_user.get("userType") == "admin":
+            # Only admins can set profId
+            update_fields["profId"] = data["profId"].strip()
         if "skills" in data:
             update_fields["skills"] = data["skills"]
         if "techStack" in data:
@@ -592,9 +596,142 @@ def update_user_profile():
         print(f"❌ Error updating profile: {e}")
         return jsonify({"message": "Failed to update profile"}), 500
 
-# =====================================================
-# 🚀 ONBOARDING ROUTES
-# =====================================================
+@app.route("/api/validate/profId", methods=["POST"])
+def validate_prof_id():
+    """Validate if a professor ID exists"""
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"message": "Not authenticated"}), 401
+
+    if current_user.get("userType") != "admin":
+        return jsonify({"message": "Unauthorized"}), 403
+
+    try:
+        data = request.get_json()
+        prof_id = data.get("profId", "").strip()
+
+        if not prof_id:
+            return jsonify({"valid": False, "message": "Professor ID is required"}), 400
+
+        # Check if prof ID exists in users collection
+        prof_user = users_collection.find_one({
+            "profId": prof_id,
+            "userType": "admin"
+        })
+
+        if prof_user:
+            return jsonify({
+                "valid": True,
+                "name": prof_user.get("name", ""),
+                "email": prof_user.get("email", "")
+            }), 200
+        else:
+            return jsonify({"valid": False, "message": "Professor ID not found"}), 404
+
+    except Exception as e:
+        print(f"❌ Error validating prof ID: {e}")
+        return jsonify({"message": "Failed to validate professor ID"}), 500
+
+@app.route("/api/validate/rollNo", methods=["POST"])
+def validate_roll_no():
+    """Validate if a student roll number exists"""
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"message": "Not authenticated"}), 401
+
+    if current_user.get("userType") != "admin":
+        return jsonify({"message": "Unauthorized"}), 403
+
+    try:
+        data = request.get_json()
+        roll_no = data.get("rollNo", "").strip()
+
+        if not roll_no:
+            return jsonify({"valid": False, "message": "Roll number is required"}), 400
+
+        # Check if roll number exists in users collection
+        student = users_collection.find_one({
+            "rollNo": roll_no,
+            "userType": "student"
+        })
+
+        if student:
+            return jsonify({
+                "valid": True,
+                "name": student.get("name", ""),
+                "email": student.get("email", "")
+            }), 200
+        else:
+            return jsonify({"valid": False, "message": "Roll number not found"}), 404
+
+    except Exception as e:
+        print(f"❌ Error validating roll number: {e}")
+        return jsonify({"message": "Failed to validate roll number"}), 500
+
+@app.route("/api/admin/professors", methods=["GET"])
+def get_all_professors():
+    """Get all professors (admins with profId) for admin view"""
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"message": "Not authenticated"}), 401
+
+    if current_user.get("userType") != "admin":
+        return jsonify({"message": "Unauthorized"}), 403
+
+    try:
+        # Fetch all users with userType = "admin" and have profId
+        professors = list(users_collection.find({
+            "userType": "admin",
+            "profId": {"$exists": True, "$ne": ""}
+        }).sort("createdAt", -1))
+
+        formatted_professors = []
+        for prof in professors:
+            prof_id = prof.get("profId", "")
+            user_id = str(prof["_id"])
+            
+            # Count all projects where professor is creator OR contributor
+            projects_count = admin_projects_collection.count_documents({
+                "$or": [
+                    {"createdBy": user_id},
+                    {"professors": prof_id}
+                ]
+            })
+            
+            # Count all research where professor is creator OR contributor
+            research_count = admin_research_collection.count_documents({
+                "$or": [
+                    {"createdBy": user_id},
+                    {"professors": prof_id}
+                ]
+            })
+            
+            # Count all patents where professor is creator OR contributor
+            patents_count = admin_patents_collection.count_documents({
+                "$or": [
+                    {"createdBy": user_id},
+                    {"professors": prof_id}
+                ]
+            })
+
+            formatted_prof = {
+                "id": str(prof["_id"]),
+                "name": prof.get("name", ""),
+                "email": prof.get("email", ""),
+                "profId": prof_id,
+                "totalProjects": projects_count,
+                "totalResearch": research_count,
+                "totalPatents": patents_count,
+                "totalAll": projects_count + research_count + patents_count,
+                "createdAt": prof.get("createdAt").isoformat() if isinstance(prof.get("createdAt"), datetime) else prof.get("createdAt")
+            }
+            formatted_professors.append(formatted_prof)
+
+        return jsonify({"professors": formatted_professors}), 200
+
+    except Exception as e:
+        print(f"❌ Error fetching professors: {e}")
+        return jsonify({"message": "Failed to fetch professors"}), 500
 
 @app.route("/api/onboarding", methods=["POST", "OPTIONS"])
 def onboarding():
@@ -933,13 +1070,28 @@ def delete_student_personal_project(project_id):
 
 @app.route("/api/user/admin/projects", methods=["GET"])
 def get_admin_projects():
-    """Get all admin-created project opportunities"""
+    """Get all admin-created project opportunities - for admin/prof who created or is contributor"""
     current_user = get_current_user()
     if not current_user:
         return jsonify({"message": "Not authenticated"}), 401
 
     try:
-        projects = list(admin_projects_collection.find().sort("createdAt", -1))
+        user_type = current_user.get("userType")
+        user_id = str(current_user["_id"])
+        prof_id = current_user.get("profId", "")
+
+        # Admin sees all projects, professors see only projects they're contributors in
+        if user_type == "admin":
+            query = {
+                "$or": [
+                    {"createdBy": user_id},
+                    {"professors": prof_id} if prof_id else {}
+                ]
+            }
+        else:
+            return jsonify({"message": "Unauthorized"}), 403
+
+        projects = list(admin_projects_collection.find(query).sort("createdAt", -1))
 
         for project in projects:
             project["id"] = str(project["_id"])
@@ -1418,6 +1570,78 @@ def get_all_students():
         import traceback
         traceback.print_exc()
         return jsonify({"message": "Failed to fetch students"}), 500
+
+@app.route("/api/admin/students/<student_id>", methods=["GET"])
+def get_student_by_id(student_id):
+    """Get a single student's detailed profile by ID"""
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"message": "Not authenticated"}), 401
+
+    if current_user.get("userType") != "admin":
+        return jsonify({"message": "Unauthorized"}), 403
+
+    try:
+        # Fetch student by ID (ID is stored as UUID string, not ObjectId)
+        student = users_collection.find_one({"_id": student_id, "userType": "student"})
+        
+        if not student:
+            return jsonify({"message": "Student not found"}), 404
+
+        # Get student's personal projects
+        personal_projects = list(project_collection.find({"userId": str(student["_id"])}))
+        
+        # Get student's applications
+        applications = list(student_applications_collection.find({"studentId": str(student["_id"])}))
+
+        formatted_student = {
+            "id": str(student["_id"]),
+            "name": student.get("name", ""),
+            "email": student.get("email", ""),
+            "field": student.get("field", ""),
+            "branch": student.get("field", ""),
+            "year": student.get("year", ""),
+            "mobile": student.get("mobile", ""),
+            "cgpa": student.get("cgpa", 0),
+            "rollNo": student.get("rollNo", ""),
+            "resumeUrl": student.get("resumeUrl", ""),
+            "skills": student.get("skills", []),
+            "techStack": student.get("techStack", []),
+            "aiTools": student.get("aiTools", []),
+            "experiences": student.get("experiences", []),
+            "workExperience": student.get("experiences", []),
+            "certifications": student.get("certifications", []),
+            "projects": student.get("projects", []),  # Onboarding projects
+            "personalProjects": [
+                {
+                    "id": str(p["_id"]),
+                    "title": p.get("title", ""),
+                    "description": p.get("description", ""),
+                    "techStack": p.get("techStack", []),
+                    "githubLink": p.get("githubLink", ""),
+                    "liveLink": p.get("liveLink", "")
+                } for p in personal_projects
+            ],
+            "applications": [
+                {
+                    "id": str(a["_id"]),
+                    "opportunityId": a.get("opportunityId", ""),
+                    "opportunityType": a.get("opportunityType", ""),
+                    "status": a.get("status", ""),
+                    "appliedAt": a.get("appliedAt").isoformat() if isinstance(a.get("appliedAt"), datetime) else a.get("appliedAt")
+                } for a in applications
+            ],
+            "onboardingCompleted": student.get("onboardingCompleted", False),
+            "createdAt": student.get("createdAt").isoformat() if isinstance(student.get("createdAt"), datetime) else student.get("createdAt")
+        }
+
+        return jsonify(formatted_student), 200
+
+    except Exception as e:
+        print(f"❌ Error fetching student profile: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"message": "Failed to fetch student profile"}), 500
 
 # =====================================================
 # 🆘 HELP / SUPPORT ROUTES
