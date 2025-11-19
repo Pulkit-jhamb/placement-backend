@@ -26,7 +26,11 @@ PyJWT==2.8.0
 python-dotenv==1.0.0
 
 # Google Gemini AI
-google-generativeai==0.3.2
+google-genai
+
+# Production Server (Render)
+gunicorn==21.2.0
+
 
 # Excel Export
 openpyxl==3.1.5

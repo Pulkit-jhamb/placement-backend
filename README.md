@@ -21,20 +21,24 @@ A Flask-based backend API for the Carevo career guidance application. This backe
 ## API Endpoints
 
 ### Authentication
+
 - `POST /signup` - User registration
 - `POST /login` - User login
 - `GET /user` - Get user profile
 
 ### AI Services
+
 - `POST /ai` - Career quiz analysis
 - `POST /mental_health_chat` - Mental health chat support
 
 ### User Management
+
 - `PATCH /user/update` - Update user data
 
 ## Setup Instructions
 
 ### Prerequisites
+
 - Python 3.8+
 - MongoDB database
 - Google Gemini API key
@@ -42,24 +46,28 @@ A Flask-based backend API for the Carevo career guidance application. This backe
 ### Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/Pulkit-jhamb/carevo-backend.git
    cd carevo-backend
    ```
 
 2. **Create virtual environment**
+
    ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
 3. **Install dependencies**
+
    ```bash
    pip install -r requirements.txt
    ```
 
 4. **Environment Variables**
    Create a `.env` file in the root directory with:
+
    ```
    MONGO_URI=your_mongodb_connection_string
    SECRET_KEY=your_secret_key
@@ -73,9 +81,23 @@ A Flask-based backend API for the Carevo career guidance application. This backe
 
 The server will start on `http://localhost:5001`
 
+## Render Deployment
+
+1. **Install dependencies** – Render will execute `pip install -r requirements.txt`, which now includes `gunicorn` and `eventlet` for the production server.
+2. **Procfile** – The root `Procfile` defines the web process: `web: gunicorn --worker-class eventlet -w 1 main:app`. Render detects this automatically, so no additional start command is required.
+3. **Environment variables** – Configure the following in the Render dashboard:
+   - `MONGO_URI`
+   - `SECRET_KEY`
+   - `GEMINI_API_KEY`
+4. **Port binding** – Render sets the `PORT` environment variable automatically. Because Gunicorn runs the Flask app, no code changes are needed.
+5. **Static IP/Networking** – Ensure your MongoDB provider allows connections from Render's IP ranges if applicable.
+
+Deploying after these steps will start the Socket.IO-enabled Flask server behind Gunicorn on Render.
+
 ## API Documentation
 
 ### Signup
+
 ```json
 POST /signup
 {
@@ -92,6 +114,7 @@ POST /signup
 ```
 
 ### Login
+
 ```json
 POST /login
 {
@@ -101,6 +124,7 @@ POST /login
 ```
 
 ### Career Quiz Analysis
+
 ```json
 POST /ai
 {
@@ -109,6 +133,7 @@ POST /ai
 ```
 
 ### Mental Health Chat
+
 ```json
 POST /mental_health_chat
 {
@@ -122,9 +147,11 @@ POST /mental_health_chat
 The application supports two types of students:
 
 ### School Students
+
 - Required fields: `email`, `password`, `name`, `institute`, `dob`, `studentType`, `class`
 
 ### College Students
+
 - Required fields: `email`, `password`, `name`, `institute`, `dob`, `studentType`, `degree`, `major`, `year`
 
 ## Security Features
@@ -143,4 +170,4 @@ The application supports two types of students:
 
 ## License
 
-This project is licensed under the MIT License. 
+This project is licensed under the MIT License.

@@ -59,7 +59,11 @@ CORS(
     app,
     resources={
         r"/api/*": {
-            "origins": ["http://localhost:5173", "http://localhost:5174"],
+            "origins": [
+                "http://localhost:5173",
+                "http://localhost:5174",
+                "https://carevo-frontend-liard.vercel.app"
+            ],
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization"],
             "expose_headers": ["Content-Range", "X-Content-Range"],
@@ -72,7 +76,11 @@ CORS(
 # Initialize Socket.IO
 socketio = SocketIO(
     app,
-    cors_allowed_origins=["http://localhost:5173", "http://localhost:5174"],
+    cors_allowed_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "https://carevo-frontend-liard.vercel.app"
+    ],
     async_mode='threading'
 )
 
