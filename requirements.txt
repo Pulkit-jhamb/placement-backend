@@ -1,0 +1,62 @@
+# =====================================================
+# CAREVO BACKEND - REQUIREMENTS
+# =====================================================
+# Install all dependencies: pip install -r requirements.txt
+
+# Core Flask Framework
+Flask==3.0.0
+Werkzeug==3.0.1
+
+# CORS Support
+Flask-CORS==4.0.0
+
+# Real-time Communication
+Flask-SocketIO==5.3.5
+python-socketio==5.10.0
+python-engineio==4.8.0
+
+# MongoDB Database
+pymongo==4.6.1
+dnspython==2.4.2
+
+# JWT Authentication
+PyJWT==2.8.0
+
+# Environment Variables
+python-dotenv==1.0.0
+
+# Google Gemini AI
+google-generativeai==0.3.2
+
+# Excel Export
+openpyxl==3.1.5
+
+# Resume Parsing
+PyPDF2==3.0.1
+python-docx==1.1.0
+
+# Additional Dependencies (auto-installed with above)
+# eventlet==0.33.3  # For SocketIO async support
+# bidict==0.22.1    # For SocketIO
+# simple-websocket==1.0.0  # For SocketIO
+
+# =====================================================
+# INSTALLATION INSTRUCTIONS:
+# =====================================================
+# 1. Create virtual environment:
+#    python -m venv venv
+#
+# 2. Activate virtual environment:
+#    Windows: venv\Scripts\activate
+#    Mac/Linux: source venv/bin/activate
+#
+# 3. Install dependencies:
+#    pip install -r requirements.txt
+#
+# 4. Create .env file with:
+#    SECRET_KEY=your_secret_key
+#    GEMINI_API_KEY=your_gemini_api_key
+#
+# 5. Run server:
+#    python main.py
+# =====================================================
