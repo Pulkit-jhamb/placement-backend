@@ -420,7 +420,7 @@ def signup():
         name = data["name"].strip()
         userType = data["userType"].strip()
 
-        valid_user_types = ["student", "admin", "placementCell"]
+        valid_user_types = ["student", "admin", "placementCell", "sales"]
         if userType not in valid_user_types:
             return jsonify({"message": f"Invalid userType. Must be one of: {', '.join(valid_user_types)}"}), 400
 
@@ -611,7 +611,7 @@ def validate_prof_id():
     if not current_user:
         return jsonify({"message": "Not authenticated"}), 401
 
-    if current_user.get("userType") != "admin":
+    if current_user.get("userType") not in ["admin", "sales"]:
         return jsonify({"message": "Unauthorized"}), 403
 
     try:
@@ -1375,17 +1375,18 @@ def delete_admin_research(paper_id):
     except Exception as e:
         print(f"❌ Error deleting admin research: {e}")
         return jsonify({"message": "Failed to delete research paper"}), 500
-
-# =====================================================
 # 🔬 ADMIN OPPORTUNITY ROUTES - Patents
 # =====================================================
 
-@app.route("/api/user/admin/patents", methods=["GET"])
+@app.route("/api/user/admin/patents", methods=["GET", "OPTIONS"])
 def get_admin_patents():
     """Get all admin-created patent opportunities"""
     current_user = get_current_user()
     if not current_user:
         return jsonify({"message": "Not authenticated"}), 401
+
+    if request.method == "OPTIONS":
+        return jsonify({}), 200
 
     try:
         patents = list(admin_patents_collection.find().sort("createdAt", -1))
@@ -1407,12 +1408,15 @@ def get_admin_patents():
         print(f"❌ Error fetching admin patents: {e}")
         return jsonify({"message": "Failed to fetch patents"}), 500
 
-@app.route("/api/user/admin/patents", methods=["POST"])
+@app.route("/api/user/admin/patents", methods=["POST", "OPTIONS"])
 def create_admin_patent():
     """Create new admin patent opportunity"""
     current_user = get_current_user()
     if not current_user:
         return jsonify({"message": "Not authenticated"}), 401
+
+    if request.method == "OPTIONS":
+        return jsonify({}), 200
 
     if current_user.get("userType") != "admin":
         return jsonify({"message": "Unauthorized"}), 403
@@ -1520,9 +1524,193 @@ def delete_admin_patent(patent_id):
         print(f"❌ Error deleting admin patent: {e}")
         return jsonify({"message": "Failed to delete patent"}), 500
 
+@app.route("/api/user/research", methods=["GET", "POST", "OPTIONS"])
+def user_research_routes():
+    current_user = get_current_user()
+
+    if request.method == "OPTIONS":
+        return jsonify({"message": "OK"}), 200
+
+    if not current_user:
+        return jsonify({"message": "Not authenticated"}), 401
+
+    try:
+        if request.method == "GET":
+            user_research = list(admin_research_collection.find({"createdBy": str(current_user.get("_id"))}).sort("createdAt", -1))
+
+            formatted = []
+            for paper in user_research:
+                paper["id"] = str(paper.get("_id"))
+                paper.pop("_id", None)
+                formatted.append(paper)
+
+            return jsonify({"papers": formatted}), 200
+
+        # POST
+        data = request.get_json()
+
+        required_fields = ["title", "domain"]
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({"message": f"Missing required field: {field}"}), 400
+
+        paper = {
+            "_id": str(uuid.uuid4()),
+            "title": data.get("title"),
+            "domain": data.get("domain"),
+            "studentsRequired": int(data.get("studentsRequired", 1)),
+            "duration": data.get("duration", ""),
+            "deadline": data.get("deadline", ""),
+            "googleFormLink": data.get("googleFormLink", ""),
+            "description": data.get("description", ""),
+            "requirements": data.get("requirements", ""),
+            "createdBy": str(current_user["_id"]),
+            "createdByName": current_user.get("name"),
+            "createdByType": current_user.get("userType", "student"),
+            "createdAt": datetime.utcnow(),
+            "updatedAt": datetime.utcnow(),
+            "status": data.get("status", "draft"),
+        }
+
+        admin_research_collection.insert_one(paper)
+        paper["id"] = paper["_id"]
+        paper.pop("_id", None)
+
+        return jsonify({"message": "Research paper created successfully", "paper": paper}), 201
+
+    except Exception as e:
+        print(f"❌ Error handling user research request: {e}")
+        status = 500
+        msg = "Failed to process research request"
+        return jsonify({"message": msg}), status
+
+
+@app.route("/api/user/patents", methods=["GET", "POST", "OPTIONS"])
+def user_patents_routes():
+    current_user = get_current_user()
+
+    if request.method == "OPTIONS":
+        return jsonify({"message": "OK"}), 200
+
+    if not current_user:
+        return jsonify({"message": "Not authenticated"}), 401
+
+    try:
+        if request.method == "GET":
+            user_patents = list(admin_patents_collection.find({"createdBy": str(current_user.get("_id"))}).sort("createdAt", -1))
+
+            formatted = []
+            for patent in user_patents:
+                patent["id"] = str(patent.get("_id"))
+                patent.pop("_id", None)
+                formatted.append(patent)
+
+            return jsonify({"patents": formatted}), 200
+
+        # POST
+        data = request.get_json()
+
+        required_fields = ["title", "domain"]
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({"message": f"Missing required field: {field}"}), 400
+
+        patent = {
+            "_id": str(uuid.uuid4()),
+            "title": data.get("title"),
+            "domain": data.get("domain"),
+            "studentsRequired": int(data.get("studentsRequired", 1)),
+            "duration": data.get("duration", ""),
+            "deadline": data.get("deadline", ""),
+            "googleFormLink": data.get("googleFormLink", ""),
+            "description": data.get("description", ""),
+            "requirements": data.get("requirements", ""),
+            "createdBy": str(current_user["_id"]),
+            "createdByName": current_user.get("name"),
+            "createdByType": current_user.get("userType", "student"),
+            "createdAt": datetime.utcnow(),
+            "updatedAt": datetime.utcnow(),
+            "status": data.get("status", "draft"),
+        }
+
+        admin_patents_collection.insert_one(patent)
+        patent["id"] = patent["_id"]
+        patent.pop("_id", None)
+
+        return jsonify({"message": "Patent created successfully", "patent": patent}), 201
+
+    except Exception as e:
+        print(f"❌ Error handling user patent request: {e}")
+        status = 500
+        msg = "Failed to process patent request"
+        return jsonify({"message": msg}), status
+
 # =====================================================
 # 👥 ADMIN ROUTES - Student Management
 # =====================================================
+
+def _format_student_entry(student):
+    projects_count = project_collection.count_documents({"userId": str(student["_id"])})
+    applications_count = student_applications_collection.count_documents({"studentId": str(student["_id"])})
+
+    return {
+        "id": str(student["_id"]),
+        "name": student.get("name", ""),
+        "email": student.get("email", ""),
+        "field": student.get("field", ""),
+        "year": student.get("year", ""),
+        "mobile": student.get("mobile", ""),
+        "cgpa": student.get("cgpa", 0),
+        "rollNo": student.get("rollNo", ""),
+        "resumeUrl": student.get("resumeUrl", ""),
+        "skills": student.get("skills", []),
+        "techStack": student.get("techStack", []),
+        "aiTools": student.get("aiTools", []),
+        "experiences": student.get("experiences", []),
+        "certifications": student.get("certifications", []),
+        "projects": student.get("projects", []),
+        "projectsCount": projects_count,
+        "applicationsCount": applications_count,
+        "onboardingCompleted": student.get("onboardingCompleted", False),
+        "createdAt": student.get("createdAt").isoformat() if isinstance(student.get("createdAt"), datetime) else student.get("createdAt")
+    }
+
+
+def _get_all_students_data():
+    students = list(users_collection.find({"userType": "student"}).sort("createdAt", -1))
+    return [_format_student_entry(student) for student in students]
+
+
+def _get_student_detail(student_id):
+    student = users_collection.find_one({"_id": student_id, "userType": "student"})
+    if not student:
+        return None
+
+    personal_projects = list(project_collection.find({"userId": str(student["_id"]) }))
+    applications = list(student_applications_collection.find({"studentId": str(student["_id"]) }))
+
+    return {
+        "id": str(student["_id"]),
+        "name": student.get("name", ""),
+        "email": student.get("email", ""),
+        "field": student.get("field", ""),
+        "branch": student.get("field", ""),
+        "year": student.get("year", ""),
+        "mobile": student.get("mobile", ""),
+        "cgpa": student.get("cgpa", 0),
+        "rollNo": student.get("rollNo", ""),
+        "resumeUrl": student.get("resumeUrl", ""),
+        "skills": student.get("skills", []),
+        "techStack": student.get("techStack", []),
+        "aiTools": student.get("aiTools", []),
+        "experiences": student.get("experiences", []),
+        "certifications": student.get("certifications", []),
+        "projects": student.get("projects", []),
+        "personalProjects": personal_projects,
+        "applications": applications,
+        "createdAt": student.get("createdAt").isoformat() if isinstance(student.get("createdAt"), datetime) else student.get("createdAt")
+    }
+
 
 @app.route("/api/admin/students", methods=["GET"])
 def get_all_students():
@@ -1535,43 +1723,7 @@ def get_all_students():
         return jsonify({"message": "Unauthorized"}), 403
 
     try:
-        # Fetch all users with userType = "student"
-        students = list(users_collection.find(
-            {"userType": "student"}
-        ).sort("createdAt", -1))
-
-        formatted_students = []
-        for student in students:
-            # Get student's personal projects count
-            projects_count = project_collection.count_documents({"userId": str(student["_id"])})
-            
-            # Get student's applications count
-            applications_count = student_applications_collection.count_documents({"studentId": str(student["_id"])})
-
-            formatted_student = {
-                "id": str(student["_id"]),
-                "name": student.get("name", ""),
-                "email": student.get("email", ""),
-                "field": student.get("field", ""),
-                "year": student.get("year", ""),
-                "mobile": student.get("mobile", ""),
-                "cgpa": student.get("cgpa", 0),
-                "rollNo": student.get("rollNo", ""),
-                "resumeUrl": student.get("resumeUrl", ""),
-                "skills": student.get("skills", []),
-                "techStack": student.get("techStack", []),
-                "aiTools": student.get("aiTools", []),
-                "experiences": student.get("experiences", []),
-                "certifications": student.get("certifications", []),
-                "projects": student.get("projects", []),  # Onboarding projects
-                "projectsCount": projects_count,  # Personal projects count
-                "applicationsCount": applications_count,
-                "onboardingCompleted": student.get("onboardingCompleted", False),
-                "createdAt": student.get("createdAt").isoformat() if isinstance(student.get("createdAt"), datetime) else student.get("createdAt")
-            }
-            formatted_students.append(formatted_student)
-
-        return jsonify({"students": formatted_students}), 200
+        return jsonify({"students": _get_all_students_data()}), 200
 
     except Exception as e:
         print(f"❌ Error fetching students: {e}")
@@ -1590,60 +1742,12 @@ def get_student_by_id(student_id):
         return jsonify({"message": "Unauthorized"}), 403
 
     try:
-        # Fetch student by ID (ID is stored as UUID string, not ObjectId)
-        student = users_collection.find_one({"_id": student_id, "userType": "student"})
-        
+        student = _get_student_detail(student_id)
+
         if not student:
             return jsonify({"message": "Student not found"}), 404
 
-        # Get student's personal projects
-        personal_projects = list(project_collection.find({"userId": str(student["_id"])}))
-        
-        # Get student's applications
-        applications = list(student_applications_collection.find({"studentId": str(student["_id"])}))
-
-        formatted_student = {
-            "id": str(student["_id"]),
-            "name": student.get("name", ""),
-            "email": student.get("email", ""),
-            "field": student.get("field", ""),
-            "branch": student.get("field", ""),
-            "year": student.get("year", ""),
-            "mobile": student.get("mobile", ""),
-            "cgpa": student.get("cgpa", 0),
-            "rollNo": student.get("rollNo", ""),
-            "resumeUrl": student.get("resumeUrl", ""),
-            "skills": student.get("skills", []),
-            "techStack": student.get("techStack", []),
-            "aiTools": student.get("aiTools", []),
-            "experiences": student.get("experiences", []),
-            "workExperience": student.get("experiences", []),
-            "certifications": student.get("certifications", []),
-            "projects": student.get("projects", []),  # Onboarding projects
-            "personalProjects": [
-                {
-                    "id": str(p["_id"]),
-                    "title": p.get("title", ""),
-                    "description": p.get("description", ""),
-                    "techStack": p.get("techStack", []),
-                    "githubLink": p.get("githubLink", ""),
-                    "liveLink": p.get("liveLink", "")
-                } for p in personal_projects
-            ],
-            "applications": [
-                {
-                    "id": str(a["_id"]),
-                    "opportunityId": a.get("opportunityId", ""),
-                    "opportunityType": a.get("opportunityType", ""),
-                    "status": a.get("status", ""),
-                    "appliedAt": a.get("appliedAt").isoformat() if isinstance(a.get("appliedAt"), datetime) else a.get("appliedAt")
-                } for a in applications
-            ],
-            "onboardingCompleted": student.get("onboardingCompleted", False),
-            "createdAt": student.get("createdAt").isoformat() if isinstance(student.get("createdAt"), datetime) else student.get("createdAt")
-        }
-
-        return jsonify(formatted_student), 200
+        return jsonify(student), 200
 
     except Exception as e:
         print(f"❌ Error fetching student profile: {e}")
@@ -1652,48 +1756,56 @@ def get_student_by_id(student_id):
         return jsonify({"message": "Failed to fetch student profile"}), 500
 
 # =====================================================
-# 🆘 HELP / SUPPORT ROUTES
+# 💼 SALES ROUTES - Student Management
 # =====================================================
 
-@app.route("/api/help/reports", methods=["POST"])
-def create_help_report():
-    """Create a new help/support report from any authenticated user."""
+@app.route("/api/sales/students", methods=["GET", "OPTIONS"])
+def sales_get_all_students():
+    if request.method == "OPTIONS":
+        return jsonify({"message": "OK"}), 200
+
     current_user = get_current_user()
     if not current_user:
         return jsonify({"message": "Not authenticated"}), 401
 
+    if current_user.get("userType") != "sales":
+        return jsonify({"message": "Unauthorized"}), 403
+
     try:
-        data = request.get_json() or {}
-        title = (data.get("title") or "").strip()
-        description = (data.get("description") or "").strip()
+        return jsonify({"students": _get_all_students_data()}), 200
+    except Exception as e:
+        print(f"❌ [SALES] Error fetching students: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"message": "Failed to fetch students"}), 500
 
-        if not title or not description:
-            return jsonify({"message": "Title and description are required"}), 400
 
-        user_type = current_user.get("userType", "unknown")
+@app.route("/api/sales/students/<student_id>", methods=["GET", "OPTIONS"])
+def sales_get_student_by_id(student_id):
+    if request.method == "OPTIONS":
+        return jsonify({"message": "OK"}), 200
 
-        report = {
-            "_id": str(uuid.uuid4()),
-            "userId": str(current_user.get("_id")),
-            "userEmail": current_user.get("email", ""),
-            "userName": current_user.get("name", ""),
-            "userType": user_type,
-            "title": title,
-            "description": description,
-            "createdAt": datetime.utcnow(),
-            "status": "open",
-        }
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"message": "Not authenticated"}), 401
 
-        help_reports_collection.insert_one(report)
+    if current_user.get("userType") != "sales":
+        return jsonify({"message": "Unauthorized"}), 403
 
-        return jsonify({
-            "message": "Help report submitted successfully",
-            "id": report["_id"],
-        }), 201
+    try:
+        student = _get_student_detail(student_id)
+
+        if not student:
+            return jsonify({"message": "Student not found"}), 404
+
+        return jsonify(student), 200
 
     except Exception as e:
-        print(f"❌ Error creating help report: {e}")
-        return jsonify({"message": "Failed to submit help report"}), 500
+        print(f"❌ [SALES] Error fetching student profile: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"message": "Failed to fetch student profile"}), 500
+
 
 # =====================================================
 # 📝 STUDENT ROUTES - View Opportunities
@@ -2444,6 +2556,236 @@ def export_filtered_students():
 
     except Exception as e:
         print(f"❌ Error exporting filtered students: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Failed to export students"}), 500
+
+
+# =====================================================
+# 🤖 SALES AI CHAT ROUTES
+# =====================================================
+
+@app.route("/api/ai/sales/chat", methods=["POST", "OPTIONS"])
+def sales_ai_chat():
+    """Sales AI chat to query and filter students using natural language"""
+    # Handle OPTIONS preflight request (CORS)
+    if request.method == "OPTIONS":
+        return jsonify({"message": "OK"}), 200
+    
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"message": "Not authenticated"}), 401
+
+    if current_user.get("userType") != "sales":
+        return jsonify({"message": "Unauthorized. Sales access required."}), 403
+
+    try:
+        data = request.get_json()
+        user_message = data.get("message", "").strip()
+
+        if not user_message:
+            return jsonify({"error": "Message is required"}), 400
+
+        # Get all students from database
+        all_students = list(users_collection.find({"userType": "student"}))
+        
+        # Convert ObjectId to string and prepare student data
+        students_data = []
+        for student in all_students:
+            student_info = {
+                "id": str(student["_id"]),
+                "name": student.get("name", ""),
+                "email": student.get("email", ""),
+                "field": student.get("field", ""),
+                "year": student.get("year", ""),
+                "cgpa": student.get("cgpa", 0),
+                "rollNo": student.get("rollNo", ""),
+                "skills": student.get("skills", []),
+                "techStack": student.get("techStack", []),
+                "aiTools": student.get("aiTools", []),
+                "experiences": student.get("experiences", []),
+                "certifications": student.get("certifications", []),
+                "projects": student.get("projects", []),
+                "linkedinProfile": student.get("linkedinProfile", ""),
+                "githubProfile": student.get("githubProfile", ""),
+                "mobile": student.get("mobile", "")
+            }
+            students_data.append(student_info)
+
+        # Use Gemini AI to process the query and filter students
+        client = genai.Client()
+
+        # Create a prompt for Gemini to understand the query and filter students
+        prompt = f"""You are an AI assistant helping a sales representative filter students based on their query.
+
+User Query: "{user_message}"
+
+Available Students Data (JSON):
+{students_data}
+
+Instructions:
+1. Analyze the user's query to understand what type of students they're looking for
+2. Filter the students based on skills, techStack, aiTools, experiences, field, year, CGPA, or any other criteria mentioned
+3. Return a JSON response with:
+   - "response": A natural language response explaining what you found (2-3 sentences max)
+   - "filtered_student_ids": An array of student IDs that match the criteria
+
+Example queries:
+- "Show me students with Blockchain skills" → Filter by skills containing "Blockchain"
+- "Show me MERN stack developers" → Filter by techStack containing MongoDB, Express, React, Node
+- "Show me AI/ML students" → Filter by skills/techStack containing AI, ML, Machine Learning, etc.
+- "Show fullstack developers with CGPA above 8" → Filter by skills AND cgpa
+
+Return ONLY valid JSON in this exact format:
+{{
+  "response": "Found X students with [criteria]. They have experience in [relevant skills].",
+  "filtered_student_ids": ["id1", "id2", "id3"]
+}}
+
+Be intelligent about matching - use synonyms and related terms. For example:
+- "AI" matches "Artificial Intelligence", "Machine Learning", "Deep Learning"
+- "MERN" matches "MongoDB", "Express", "React", "Node.js"
+- "Fullstack" matches students with both frontend and backend skills
+"""
+
+        print(f"🔍 [SALES] Calling Gemini API with model: gemini-2.5-flash")
+        print(f"🔍 [SALES] Number of students: {len(students_data)}")
+        
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
+
+        # Parse Gemini response
+        ai_text = response.text.strip()
+        print(f"🤖 [SALES] Gemini raw response (first 500 chars): {ai_text[:500]}")
+        
+        # Extract JSON from response (handle markdown code blocks)
+        if "```json" in ai_text:
+            ai_text = ai_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in ai_text:
+            ai_text = ai_text.split("```")[1].split("```")[0].strip()
+
+        print(f"📝 [SALES] Extracted JSON: {ai_text[:300]}")
+        
+        import json
+        ai_response = json.loads(ai_text)
+        print(f"✅ [SALES] JSON parsed successfully")
+
+        # Get filtered students based on IDs returned by AI
+        filtered_student_ids = ai_response.get("filtered_student_ids", [])
+        filtered_students = [s for s in students_data if s["id"] in filtered_student_ids]
+
+        print(f"✅ [SALES] Found {len(filtered_students)} students")
+        
+        return jsonify({
+            "response": ai_response.get("response", "Here are the students matching your criteria."),
+            "students": filtered_students
+        }), 200
+
+    except Exception as e:
+        error_msg = str(e)
+        print(f"❌ [SALES] Error in sales AI chat: {error_msg}")
+        print(f"❌ [SALES] Error type: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
+        
+        return jsonify({
+            "response": f"Error: {error_msg}",
+            "students": [],
+            "error_type": type(e).__name__
+        }), 200
+
+
+@app.route("/api/ai/sales/export-filtered-students", methods=["POST", "OPTIONS"])
+def sales_export_filtered_students():
+    """Export filtered students to Excel for sales"""
+    # Handle OPTIONS preflight request (CORS)
+    if request.method == "OPTIONS":
+        return jsonify({"message": "OK"}), 200
+    
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"message": "Not authenticated"}), 401
+
+    if current_user.get("userType") != "sales":
+        return jsonify({"message": "Unauthorized. Sales access required."}), 403
+
+    try:
+        data = request.get_json()
+        students = data.get("students", [])
+
+        if not students:
+            return jsonify({"error": "No students to export"}), 400
+
+        # Create workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Filtered Students"
+
+        # Headers
+        headers = [
+            "Name", "Email", "Roll No", "Branch", "Year", "CGPA",
+            "Mobile", "Skills", "Tech Stack", "AI Tools",
+            "LinkedIn", "GitHub", "Experience Count", "Projects Count", "Certifications Count"
+        ]
+
+        # Style headers
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        # Data rows
+        for row_num, student in enumerate(students, 2):
+            ws.cell(row=row_num, column=1, value=student.get("name", ""))
+            ws.cell(row=row_num, column=2, value=student.get("email", ""))
+            ws.cell(row=row_num, column=3, value=student.get("rollNo", ""))
+            ws.cell(row=row_num, column=4, value=student.get("field", ""))
+            ws.cell(row=row_num, column=5, value=student.get("year", ""))
+            ws.cell(row=row_num, column=6, value=student.get("cgpa", 0))
+            ws.cell(row=row_num, column=7, value=student.get("mobile", ""))
+            ws.cell(row=row_num, column=8, value=", ".join(student.get("skills", [])))
+            ws.cell(row=row_num, column=9, value=", ".join(student.get("techStack", [])))
+            ws.cell(row=row_num, column=10, value=", ".join(student.get("aiTools", [])))
+            ws.cell(row=row_num, column=11, value=student.get("linkedinProfile", ""))
+            ws.cell(row=row_num, column=12, value=student.get("githubProfile", ""))
+            ws.cell(row=row_num, column=13, value=len(student.get("experiences", [])))
+            ws.cell(row=row_num, column=14, value=len(student.get("projects", [])))
+            ws.cell(row=row_num, column=15, value=len(student.get("certifications", [])))
+
+        # Auto-adjust column widths
+        for column in ws.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[column_letter].width = adjusted_width
+
+        # Save to BytesIO
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        return send_file(
+            output,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=f"sales_filtered_students_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        )
+
+    except Exception as e:
+        print(f"❌ [SALES] Error exporting filtered students: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": "Failed to export students"}), 500
